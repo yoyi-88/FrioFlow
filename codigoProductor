@@ -1,0 +1,105 @@
+import json
+import time
+import random
+from datetime import datetime, timedelta
+from kafka import KafkaProducer
+
+# ==============================================================================
+# 1. CONFIGURACIÓN INICIAL Y CONEXIÓN A KAFKA
+# ==============================================================================
+# Instanciamos el productor. Le indicamos dónde está Kafka (localhost:9092)
+# y le enseñamos a convertir (serializar) nuestros diccionarios Python a JSON.
+producer = KafkaProducer(
+    bootstrap_servers=['localhost:9092'],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+# Definimos una semilla (seed) para que los datos aleatorios sean siempre los 
+# mismos si repetimos la simulación. Esto es obligatorio para que el proyecto 
+# sea auditable y reproducible.
+random.seed(42)
+
+# ==============================================================================
+# 2. DEFINICIÓN DEL ALMACÉN (CONTRATO DE DATOS)
+# ==============================================================================
+simulation_id = f"sim_frioflow_{int(time.time())}"
+
+camaras = [
+    {"chamber_id": "C1", "sensor_id": "S1", "storage_mode": "REFRIGERADO", "upper_limit_c": 4.0},
+    {"chamber_id": "C2", "sensor_id": "S2", "storage_mode": "REFRIGERADO", "upper_limit_c": 4.0},
+    {"chamber_id": "C3", "sensor_id": "S3", "storage_mode": "CONGELADO", "upper_limit_c": -18.0},
+    {"chamber_id": "C4", "sensor_id": "S4", "storage_mode": "CONGELADO", "upper_limit_c": -18.0},
+    {"chamber_id": "C5", "sensor_id": "S5", "storage_mode": "REFRIGERADO", "upper_limit_c": 4.0}
+]
+
+proveedores = ["Granjas Sur S.L.", "Pescados Marítimo", "Carnes Villa"]
+productos = {
+    "REFRIGERADO": ["Lote de Manzanas", "Yogur Natural", "Pollo Fresco"],
+    "CONGELADO": ["Helado de Vainilla", "Merluza Congelada", "Verduras Mix"]
+}
+
+# Enviamos el documento de configuración general a su propio tópico de Kafka
+config_payload = {
+    "simulation_id": simulation_id,
+    "simulation_days": 7,
+    "random_seed": 42,
+    "chambers": camaras
+}
+producer.send('frioflow.configuracion', config_payload)
+print(f"[*] Configuración enviada a Kafka. ID Simulación: {simulation_id}")
+
+# ==============================================================================
+# 3. MOTOR DE SIMULACIÓN ACELERADA (7 DÍAS)
+# ==============================================================================
+# Configuramos la fecha de inicio (ej. un lunes de noviembre) y el final (7 días después)
+fecha_actual = datetime(2026, 11, 2, 0, 0, 0)
+fecha_fin = fecha_actual + timedelta(days=7)
+
+print("[*] Iniciando generación acelerada de mediciones de temperatura...")
+
+contador_mensajes = 0
+
+while fecha_actual <= fecha_fin:
+    # Por cada ciclo de tiempo, generamos 1 lectura para cada una de las 5 cámaras
+    for camara in camaras:
+        modo = camara["storage_mode"]
+        limite = camara["upper_limit_c"]
+        
+        # Lógica térmica: forzamos que de vez en cuando la temperatura supere el límite legal
+        if modo == "REFRIGERADO":
+            # Lo normal es entre 1 y 3.5, pero a veces sube a 5.0 (límite es 4)
+            temp = round(random.uniform(1.0, 5.0), 2)
+        else:
+            # Lo normal es -22 a -19, pero a veces sube a -16 (límite es -18)
+            temp = round(random.uniform(-22.0, -16.0), 2)
+            
+        medicion = {
+            "schema_version": "1.0",
+            "simulation_id": simulation_id,
+            "measured_at": fecha_actual.isoformat(),
+            "emitted_at": datetime.now().isoformat(), # Hora real de ejecución
+            "sensor_id": camara["sensor_id"],
+            "chamber_id": camara["chamber_id"],
+            "storage_mode": modo,
+            "batch_id": f"BATCH_{random.randint(100,999)}",
+            "storage_id": f"PALLET_{random.randint(10,99)}",
+            "supplier": random.choice(proveedores),
+            "product": random.choice(productos[modo]),
+            "temperature_c": temp,
+            "upper_limit_c": limite,
+            "measurement_valid": True
+        }
+        
+        # Publicamos la lectura en el tópico de Kafka
+        producer.send('frioflow.mediciones', medicion)
+        contador_mensajes += 1
+        
+    # Avanzamos el reloj virtual 15 minutos (Muestreo de sensores)
+    fecha_actual += timedelta(minutes=15)
+    
+    # Pausa minúscula para no saturar la CPU, logrando la aceleración del tiempo
+    time.sleep(0.005) 
+
+# Aseguramos que todos los mensajes salgan de la memoria hacia Kafka
+producer.flush()
+print(f"[*] Simulación finalizada. {contador_mensajes} eventos generados y enviados a Kafka con éxito.")
