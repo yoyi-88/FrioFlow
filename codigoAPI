@@ -1,0 +1,106 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
+import pymongo
+
+# 1. INICIALIZACIÓN DE LA API
+app = FastAPI(title="API Backend de FríoFlow")
+
+# Habilitamos CORS para que la futura página web (HTML/JS) 
+# tenga permiso para solicitar datos a esta API sin ser bloqueada.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 2. CONEXIÓN SEGURA A MONGODB
+# Las credenciales y la IP de la base de datos se quedan aquí, 
+# ocultas y protegidas del navegador del usuario final.
+client = MongoClient("mongodb://localhost:27017/")
+db = client["frioflow_db"]
+col_mediciones = db["mediciones"]
+col_operativos = db["operativos"]
+
+# =====================================================================
+# ENDPOINTS (RUTAS) DE LA API
+# =====================================================================
+
+@app.get("/simulaciones")
+def obtener_simulaciones():
+    """Devuelve una lista de los IDs de todas las simulaciones almacenadas."""
+    simulaciones = col_operativos.find({}, {"_id": 0, "simulation_id": 1})
+    return [sim["simulation_id"] for sim in simulaciones]
+
+@app.get("/configuracion/{sim_id}")
+def obtener_configuracion(sim_id: str):
+    """Devuelve la configuración completa de una simulación concreta."""
+    config = col_operativos.find_one({"simulation_id": sim_id}, {"_id": 0})
+    if not config:
+        raise HTTPException(status_code=404, detail="Simulación no encontrada")
+    return config
+
+@app.get("/estado_camaras/{sim_id}")
+def obtener_estado_camaras(sim_id: str):
+    """
+    Devuelve la última temperatura registrada por cada cámara y un conteo 
+    básico de alertas para cumplir con el requisito de monitorización en tiempo real.
+    Usamos consultas acotadas (.limit(1)) para no descargar toda la colección.
+    """
+    config = col_operativos.find_one({"simulation_id": sim_id})
+    if not config:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada")
+        
+    estado_actual = []
+    
+    for camara in config.get("chambers", []):
+        c_id = camara["chamber_id"]
+        limite = camara["upper_limit_c"]
+        
+        # Buscamos la última medición válida de esta cámara ordenando por fecha descendente
+        ultima_med = col_mediciones.find_one(
+            {"simulation_id": sim_id, "chamber_id": c_id},
+            {"_id": 0},
+            sort=[("measured_at", pymongo.DESCENDING)]
+        )
+        
+        # Calculamos cuántas veces se ha superado el límite en esta cámara
+        alertas = col_mediciones.count_documents({
+            "simulation_id": sim_id,
+            "chamber_id": c_id,
+            "temperature_c": {"$gt": limite}
+        })
+        
+        if ultima_med:
+            estado_actual.append({
+                "chamber_id": c_id,
+                "name": camara.get("name", c_id),
+                "temperature": ultima_med["temperature_c"],
+                "limit": limite,
+                "measured_at": ultima_med["measured_at"],
+                "total_alerts": alertas,
+                "status": "ALERTA" if ultima_med["temperature_c"] > limite else "OK"
+            })
+        else:
+            estado_actual.append({
+                "chamber_id": c_id,
+                "name": camara.get("name", c_id),
+                "temperature": None,
+                "status": "SIN DATOS"
+            })
+            
+    return estado_actual
+
+@app.get("/ultimas_lecturas/{sim_id}")
+def ultimas_lecturas(sim_id: str, limite: int = 15):
+    """
+    Devuelve las últimas N lecturas globales para la tabla de la web, 
+    ordenadas por la fecha real de emisión (emitted_at).
+    """
+    lecturas = list(col_mediciones.find(
+        {"simulation_id": sim_id},
+        {"_id": 0}
+    ).sort("emitted_at", pymongo.DESCENDING).limit(limite))
+    
+    return lecturas
