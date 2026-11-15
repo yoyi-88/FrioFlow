@@ -74,6 +74,7 @@ while fecha_actual <= fecha_fin:
             temp = round(random.uniform(-22.0, -16.0), 2)
             
         medicion = {
+            "event_id": f"EV-{simulation_id}-{contador_mensajes}",
             "schema_version": "1.0",
             "simulation_id": simulation_id,
             "measured_at": fecha_actual.isoformat(),
