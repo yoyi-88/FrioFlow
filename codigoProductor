@@ -89,6 +89,20 @@ while fecha_actual <= fecha_fin:
             "upper_limit_c": limite,
             "measurement_valid": True
         }
+        # --- NUEVO: MODO INCIDENCIAS CONTROLADAS ---
+        # 5% de probabilidad de corromper el evento a propósito
+        if random.random() < 0.05: 
+            tipo_error = random.choice(["invalido", "ausente", "duplicado", "corrupto"])
+            
+            if tipo_error == "invalido":
+                medicion["measurement_valid"] = False
+            elif tipo_error == "ausente":
+                del medicion["chamber_id"] # Borramos un identificador clave
+            elif tipo_error == "duplicado":
+                producer.send('frioflow.mediciones', medicion) # Lo enviamos una vez extra
+            elif tipo_error == "corrupto":
+                medicion = "Esto es un string, no un objeto JSON válido"
+        # -------------------------------------------
         
         # Publicamos la lectura en el tópico de Kafka
         producer.send('frioflow.mediciones', medicion)
