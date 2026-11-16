@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>FríoFlow - Centro de Control</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .alerta { background-color: #ffeeba; border-color: #ffc107; color: #856404; font-weight: bold; }
+        .ok { background-color: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .sin-datos { background-color: #e2e3e5; color: #383d41; }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">❄️ FríoFlow Dashboard</span>
+            <div class="d-flex align-items-center">
+                <span id="error-api" class="badge bg-danger me-3 d-none">Error de conexión API</span>
+                <span class="text-light me-2">Última actualización:</span>
+                <span id="ultima-act" class="badge bg-secondary">Cargando...</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        <!-- Controles -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <label><strong>Seleccionar Simulación:</strong></label>
+                <select id="sim-selector" class="form-select"></select>
+            </div>
+        </div>
+
+        <!-- Tarjetas de Cámaras -->
+        <h4 class="mb-3">Estado en Tiempo Real (Esquema de Cámaras)</h4>
+        <div class="row mb-4" id="contenedor-camaras">
+            <!-- Se rellenará con JavaScript -->
+        </div>
+
+        <div class="row">
+            <!-- Gráfica -->
+            <div class="col-md-7">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">Evolución Térmica</div>
+                    <div class="card-body">
+                        <canvas id="graficaTemperaturas"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Tabla Últimas Lecturas -->
+            <div class="col-md-5">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">Últimas Mediciones (Eventos en bruto)</div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Cámara</th>
+                                    <th>Lote</th>
+                                    <th>Temp</th>
+                                    <th>Límite</th>
+                                    <th>Exceso</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-lecturas"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
