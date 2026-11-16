@@ -104,3 +104,12 @@ def ultimas_lecturas(sim_id: str, limite: int = 15):
     ).sort("emitted_at", pymongo.DESCENDING).limit(limite))
     
     return lecturas
+@app.post("/nueva_configuracion")
+def crear_configuracion(nueva_config: dict):
+    """Recibe un JSON desde el formulario web y lo guarda en MongoDB."""
+    # Verificamos que no exista ya ese ID
+    if col_operativos.find_one({"simulation_id": nueva_config.get("simulation_id")}):
+        raise HTTPException(status_code=400, detail="El ID de simulación ya existe")
+    
+    col_operativos.insert_one(nueva_config)
+    return {"mensaje": "Configuración guardada correctamente. Reinicie el simulador Python."}
